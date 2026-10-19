@@ -34,7 +34,7 @@ jobs:
             if [ -n "$FOUND_SETTINGS" ]; then
               echo "dir=$(dirname "$FOUND_SETTINGS")" >> "$GITHUB_OUTPUT"
             else
-              echo "Error: settings.gradle.kts not found inside zip! Check if Drive file is set to 'Anyone with the link'."
+              echo "Error: settings.gradle.kts not found inside zip!"
               exit 1
             fi
           fi
@@ -44,9 +44,6 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Setup Gradle 8.6
         uses: gradle/actions/setup-gradle@v4
