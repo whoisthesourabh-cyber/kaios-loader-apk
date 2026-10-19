@@ -1,0 +1,84 @@
+name: Build KaiOS Loader APK
+
+on:
+  push:
+    branches: [ "*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download & Extract Project from Google Drive (or Repo)
+        id: locate
+        run: |
+          if [ -f "settings.gradle.kts" ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+            if [ -z "$ZIP_FILE" ]; then
+              echo "Downloading KaiOS_Loader_Android_Project_Fixed.zip from Google Drive..."
+              curl -L "https://drive.google.com/uc?export=download&id=1V791dH5T5EDypzaoYYLihcfttihlzzxN" -o project.zip
+              ZIP_FILE="project.zip"
+            fi
+            mkdir -p ./extracted_proj
+            unzip -o "$ZIP_FILE" -d ./extracted_proj
+            FOUND_SETTINGS=$(find ./extracted_proj -name "settings.gradle.kts" | head -n 1)
+            if [ -n "$FOUND_SETTINGS" ]; then
+              echo "dir=$(dirname "$FOUND_SETTINGS")" >> "$GITHUB_OUTPUT"
+            else
+              echo "Error: settings.gradle.kts not found inside zip! Check if Drive file is set to 'Anyone with the link'."
+              exit 1
+            fi
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle 8.6
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Build Debug & Signed Release APKs
+        working-directory: ${{ steps.locate.outputs.dir }}
+        run: |
+          gradle assembleDebug assembleRelease --no-daemon --stacktrace
+
+      - name: Prepare Output APKs
+        run: |
+          mkdir -p output_apks
+          PROJ_DIR="${{ steps.locate.outputs.dir }}"
+          cp "$PROJ_DIR/app/build/outputs/apk/debug/app-debug.apk" "output_apks/KaiOS-Loader-v2.0-debug.apk"
+          cp "$PROJ_DIR/app/build/outputs/apk/release/app-release.apk" "output_apks/KaiOS-Loader-v2.0-release-signed.apk"
+          ls -lh output_apks/
+
+      - name: Upload APKs to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: KaiOS-Loader-APKs
+          path: output_apks/*.apk
+          if-no-files-found: error
+
+      - name: Publish APKs to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: "KaiOS Loader v2.0 (Build #${{ github.run_number }})"
+          body: |
+            Automated build of **KaiOS Loader for Android v2.0**.
+            - Install either `KaiOS-Loader-v2.0-release-signed.apk` or `KaiOS-Loader-v2.0-debug.apk` on your Android device (Android 7.0+).
+          files: output_apks/*.apk
